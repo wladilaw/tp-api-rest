@@ -1,14 +1,5 @@
-#!/usr/bin/env python3
-"""Surveillant : joue le rôle de l'outil de supervision qui émet les alertes.
 
-Toutes les 5 secondes, il demande à Docker la liste des conteneurs gérés. Pour chaque
-conteneur arrêté, il envoie une alerte « container_down » au webhook de votre API.
 
-    python surveillant.py
-
-Il lit le fichier .env du dossier courant (WEBHOOK_SECRET, DOCKER_API_URL).
-Pour le voir agir : arrêtez un conteneur géré avec « docker stop <nom> ».
-"""
 
 import json
 import os
@@ -17,7 +8,7 @@ import time
 import requests
 
 API = "http://127.0.0.1:8000"
-PERIODE = 5  # secondes
+PERIODE = 5
 
 
 def lire_env(chemin=".env"):

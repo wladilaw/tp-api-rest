@@ -1,22 +1,5 @@
-#!/usr/bin/env python3
-"""Vérificateur du projet « micro-API d'administration ».
 
-Joue les requêtes du contrat contre votre API et dit, bloc par bloc, ce qui passe.
 
-    python verifier.py                  tous les blocs
-    python verifier.py lecture          un seul bloc
-    python verifier.py lecture ecriture plusieurs blocs
-    python verifier.py --api http://127.0.0.1:8000
-
-Blocs : lecture, ecriture, authentification, netbox, webhook, metriques.
-
-La configuration est lue dans le fichier .env du dossier courant (les variables
-d'environnement déjà définies l'emportent). Le vérificateur parle à trois services :
-votre API, l'API Docker (pour constater ce qui s'est réellement passé) et NetBox.
-
-Il ne crée et ne supprime que des conteneurs dont le nom commence par « verif- ».
-Seule dépendance : requests.
-"""
 
 import argparse
 import json
@@ -36,11 +19,11 @@ DELAI = 20
 
 
 class Echec(AssertionError):
-    """Une attente du contrat n'est pas respectée."""
+    pass
 
 
 def attendu(reponse, *codes):
-    """Vérifie le code de statut d'une réponse."""
+
     if reponse.status_code not in codes:
         voulu = " ou ".join(str(c) for c in codes)
         raise Echec(f"code {voulu} attendu, reçu {reponse.status_code} : {reponse.text[:120]!r}")
@@ -48,7 +31,7 @@ def attendu(reponse, *codes):
 
 
 def lire_env(chemin=".env"):
-    """Lit un fichier .env (CLE=valeur), sans écraser l'environnement existant."""
+
     valeurs = {}
     if os.path.exists(chemin):
         with open(chemin, encoding="utf-8") as fichier:
@@ -73,14 +56,13 @@ class Verificateur:
             "inconnu": "jeton-que-personne-n-a-emis",
         }
         self.secret_webhook = env.get("WEBHOOK_SECRET", "")
-        self.resultats = {}   # bloc -> [(libellé, réussi, détail)]
+        self.resultats = {}
         self.bloc = None
         self.suffixe = "".join(random.choices(string.ascii_lowercase + string.digits, k=5))
 
-    # ---- accès aux trois services -------------------------------------------------
 
     def api(self, methode, chemin, jeton="admin", **options):
-        """Appelle votre API. jeton : "admin", "lecteur", "inconnu" ou None (aucun)."""
+
         entetes = options.pop("headers", {})
         if jeton and self.jetons.get(jeton):
             entetes.setdefault("Authorization", f"Bearer {self.jetons[jeton]}")
@@ -102,13 +84,12 @@ class Verificateur:
             methode, f"{self.netbox_url}/api{chemin}", headers=entetes, timeout=DELAI, **options
         )
 
-    # ---- constats faits directement sur Docker et NetBox ---------------------------
 
     def nom(self, role):
         return f"{PREFIXE}{role}-{self.suffixe}"
 
     def etat_docker(self, identifiant):
-        """État réel d'un conteneur d'après Docker, ou None s'il n'existe pas."""
+
         reponse = self.docker("GET", f"/containers/{identifiant}/json")
         if reponse.status_code == 404:
             return None
@@ -121,7 +102,7 @@ class Verificateur:
         }
 
     def lancer_directement(self, nom, gere=True):
-        """Crée un conteneur sans passer par votre API (comme le ferait un collègue)."""
+
         corps = {"Image": IMAGE, "Labels": {ETIQUETTE: "true"} if gere else {}}
         reponse = self.docker("POST", "/containers/create", params={"name": nom}, json=corps)
         if reponse.status_code == 404:
@@ -149,7 +130,7 @@ class Verificateur:
         return resultats[0] if resultats else None
 
     def preparer_netbox(self):
-        """Crée le cluster docker-local s'il manque (type de cluster « Docker »)."""
+
         reponse = self.netbox("GET", "/virtualization/clusters/", params={"name": CLUSTER})
         reponse.raise_for_status()
         if reponse.json()["results"]:
@@ -169,7 +150,7 @@ class Verificateur:
         ).raise_for_status()
 
     def nettoyer(self):
-        """Supprime tout ce que le vérificateur a pu laisser derrière lui."""
+
         try:
             filtres = json.dumps({"name": [PREFIXE]})
             for conteneur in self.docker(
@@ -188,10 +169,9 @@ class Verificateur:
             except (requests.RequestException, ValueError):
                 pass
 
-    # ---- enregistrement des constats ----------------------------------------------
 
     def test(self, libelle):
-        """Décorateur : exécute tout de suite la fonction et note si elle passe."""
+
 
         def executer(fonction):
             try:
@@ -203,7 +183,7 @@ class Verificateur:
                 constat = (libelle, False, str(echec) or "attente non respectée")
             except requests.RequestException as erreur:
                 constat = (libelle, False, f"service injoignable : {type(erreur).__name__}")
-            except Exception as erreur:  # réponse mal formée, clé absente, etc.
+            except Exception as erreur:
                 constat = (libelle, False, f"{type(erreur).__name__} : {erreur}")
             self.resultats.setdefault(self.bloc, []).append(constat)
             return fonction
@@ -211,11 +191,8 @@ class Verificateur:
         return executer
 
 
-# ==== Les blocs ====================================================================
-
-
 def bloc_lecture(v):
-    """TP3 : /health, liste, détail, 404."""
+
     nom_gere, nom_etranger = v.nom("lecture"), v.nom("etranger")
     ids = {}
 
@@ -269,7 +246,7 @@ def bloc_lecture(v):
 
 
 def bloc_ecriture(v):
-    """TP4 : création, arrêt, démarrage, suppression, validation des entrées."""
+
     nom = v.nom("ecriture")
     cree = {}
 
@@ -344,7 +321,7 @@ def bloc_ecriture(v):
 
 
 def bloc_authentification(v):
-    """TP5 : 401 sans token valide, 403 avec le token lecteur sur une écriture."""
+
     nom = v.nom("auth")
     corps = {"name": nom, "image": IMAGE}
     protege = []
@@ -395,7 +372,7 @@ def bloc_authentification(v):
 
 
 def bloc_netbox(v):
-    """TP6 : chaque conteneur géré a sa machine virtuelle dans le cluster docker-local."""
+
     nom = v.nom("netbox")
     cree = {}
 
@@ -436,7 +413,7 @@ def bloc_netbox(v):
 
 
 def bloc_webhook(v):
-    """TP7 : une alerte container_down redémarre le conteneur visé."""
+
     nom = v.nom("webhook")
     alerte = {"alert": "container_down", "container": nom}
     ids = {}
@@ -486,7 +463,7 @@ def bloc_webhook(v):
 
 
 def lire_metriques(texte):
-    """Analyse le format texte Prometheus : {nom{labels}: valeur} et {nom: type}."""
+
     valeurs, types = {}, {}
     for ligne in texte.splitlines():
         ligne = ligne.strip()
@@ -517,7 +494,7 @@ OPERATIONS = [
 
 
 def bloc_metriques(v):
-    """TP8 : /metrics au format Prometheus, documentation OpenAPI."""
+
     nom = v.nom("metriques")
     releve = {}
 
@@ -579,7 +556,7 @@ def bloc_metriques(v):
         releve["openapi"] = attendu(v.api("GET", "/openapi.json", jeton=None), 200).json()
 
     def operations():
-        """{(méthode, chemin normalisé): description de l'opération}"""
+
         trouvees = {}
         for chemin, methodes in releve["openapi"].get("paths", {}).items():
             morceaux = ["{}" if m.startswith("{") else m for m in chemin.split("/")]
@@ -635,13 +612,13 @@ BLOCS = {
 
 
 def executer(verificateur, noms, blocs=BLOCS):
-    """Joue les blocs demandés. Renvoie {bloc: [(libellé, réussi, détail)]}."""
+
     verificateur.nettoyer()
     if verificateur.netbox_token:
         try:
-            verificateur.preparer_netbox()  # le cluster doit exister avant toute création
+            verificateur.preparer_netbox()
         except requests.RequestException:
-            pass  # NetBox injoignable : le bloc netbox le signalera
+            pass
     try:
         for nom in noms:
             verificateur.bloc = nom

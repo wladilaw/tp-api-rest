@@ -1,35 +1,21 @@
-# Environnement du cours « API Rest pour l'administration système ».
-#
-#   docker compose up -d          démarre l'API Docker et NetBox
-#   docker compose ps             état des services
-#   docker compose down           arrête tout (les données NetBox sont conservées)
-#   docker compose down -v        arrête tout et efface les données NetBox
-#
-# NetBox met 2 à 5 minutes à démarrer la première fois (création de la base).
-
 name: apirest
-
 services:
-
-  # L'API Docker Engine, exposée en HTTP. On ne publie jamais le socket Docker brut :
-  # ce proxy n'autorise que les familles d'appels listées ci-dessous.
   docker-api:
     image: tecnativa/docker-socket-proxy:v0.4.2
     environment:
-      CONTAINERS: 1        # /containers/...
-      IMAGES: 1            # /images/...
-      INFO: 1              # /info
-      VERSION: 1           # /version
-      POST: 1              # autorise les méthodes d'écriture (POST, DELETE)
+      CONTAINERS: 1
+      IMAGES: 1
+      INFO: 1
+      VERSION: 1
+      POST: 1
       ALLOW_START: 1
       ALLOW_STOP: 1
       ALLOW_RESTARTS: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "127.0.0.1:2375:2375"   # joignable depuis votre machine uniquement
+      - "127.0.0.1:2375:2375"
     restart: unless-stopped
-
   netbox:
     image: netboxcommunity/netbox:v4.7-5.1.1
     depends_on:
@@ -63,7 +49,6 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
-
   netbox-postgres:
     image: postgres:17-alpine
     environment:
@@ -78,11 +63,9 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
-
   netbox-redis:
     image: valkey/valkey:8-alpine
     restart: unless-stopped
-
   api:
     build: .
     env_file: .env
@@ -97,6 +80,5 @@ services:
       netbox:
         condition: service_healthy
     restart: unless-stopped
-
 volumes:
   netbox-donnees:
