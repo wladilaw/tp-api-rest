@@ -1,18 +1,18 @@
-# Environnement du cours � API Rest pour l'administration syst�me �.
+# Environnement du cours « API Rest pour l'administration système ».
 #
-#   docker compose up -d          d�marre l'API Docker et NetBox
-#   docker compose ps             �tat des services
-#   docker compose down           arr�te tout (les donn�es NetBox sont conserv�es)
-#   docker compose down -v        arr�te tout et efface les donn�es NetBox
+#   docker compose up -d          démarre l'API Docker et NetBox
+#   docker compose ps             état des services
+#   docker compose down           arrête tout (les données NetBox sont conservées)
+#   docker compose down -v        arrête tout et efface les données NetBox
 #
-# NetBox met 2 � 5 minutes � d�marrer la premi�re fois (cr�ation de la base).
+# NetBox met 2 à 5 minutes à démarrer la première fois (création de la base).
 
 name: apirest
 
 services:
 
-  # L'API Docker Engine, expos�e en HTTP. On ne publie jamais le socket Docker brut :
-  # ce proxy n'autorise que les familles d'appels list�es ci-dessous.
+  # L'API Docker Engine, exposée en HTTP. On ne publie jamais le socket Docker brut :
+  # ce proxy n'autorise que les familles d'appels listées ci-dessous.
   docker-api:
     image: tecnativa/docker-socket-proxy:v0.4.2
     environment:
@@ -20,7 +20,7 @@ services:
       IMAGES: 1            # /images/...
       INFO: 1              # /info
       VERSION: 1           # /version
-      POST: 1              # autorise les m�thodes d'�criture (POST, DELETE)
+      POST: 1              # autorise les méthodes d'écriture (POST, DELETE)
       ALLOW_START: 1
       ALLOW_STOP: 1
       ALLOW_RESTARTS: 1
@@ -83,20 +83,20 @@ services:
     image: valkey/valkey:8-alpine
     restart: unless-stopped
 
-  # Votre micro-API : d�commentez ce service au TP3, une fois votre Dockerfile �crit.
-  # Dans le r�seau de compose, les services se joignent par leur nom, pas par localhost.
-  #
-  # api:
-  #   build: .
-  #   env_file: .env
-  #   environment:
-  #     DOCKER_API_URL: http://docker-api:2375
-  #     NETBOX_URL: http://netbox:8080
-  #   ports:
-  #     - "127.0.0.1:8000:8000"
-  #   depends_on:
-  #     - docker-api
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DOCKER_API_URL: http://docker-api:2375
+      NETBOX_URL: http://netbox:8080
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      docker-api:
+        condition: service_started
+      netbox:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   netbox-donnees:
-
