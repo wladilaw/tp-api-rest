@@ -10,6 +10,7 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,3 +20,64 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pytest -q
       - run: docker build -t tp-api-rest:test .
+      - name: Pr�parer la configuration du laboratoire
+        run: |
+          python - <<'PY'
+          import secrets
+          from pathlib import Path
+          values = {
+              "DOCKER_API_URL": "http://127.0.0.1:2375",
+              "NETBOX_URL": "http://127.0.0.1:8080",
+              "NETBOX_TOKEN": "",
+              **{name: secrets.token_urlsafe(32) for name in (
+                  "API_TOKEN_ADMIN", "API_TOKEN_READER", "WEBHOOK_SECRET"
+              )},
+          }
+          Path(".env").write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+          PY
+      - name: D�marrer les services du cours
+        run: |
+          docker compose up -d --wait --wait-timeout 600 docker-api netbox
+          docker pull nginx:alpine
+          docker pull redis:alpine
+          docker pull httpd:alpine
+      - name: Pr�parer le token NetBox du laboratoire
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import requests
+          response = requests.post(
+              "http://127.0.0.1:8080/api/users/tokens/provision/",
+              json={"username": "admin", "password": "admin"},
+              headers={"Accept": "application/json"}, timeout=20,
+          )
+          response.raise_for_status()
+          data = response.json()
+          token = f"nbt_{data['key']}.{data['token']}"
+          with Path(".env").open("a") as config:
+              config.write(f"NETBOX_TOKEN={token}\n")
+          PY
+      - name: V�rifier le contrat sur Docker et NetBox
+        run: |
+          docker compose up -d --build api
+          python - <<'PY'
+          import time
+          import requests
+          for attempt in range(30):
+              try:
+                  requests.get("http://127.0.0.1:8000/health", timeout=2).raise_for_status()
+                  break
+              except requests.RequestException:
+                  time.sleep(2)
+          else:
+              raise SystemExit("L'API ne d�marre pas.")
+          PY
+          python verifier.py
+          python inventaire.py
+      - name: Afficher les erreurs de l'API
+        if: failure()
+        run: docker compose logs --tail=60 api docker-api
+      - name: Arr�ter le laboratoire
+        if: always()
+        run: docker compose down
+
