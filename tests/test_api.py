@@ -2,9 +2,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import requests
+from fastapi import HTTPException
 
+import main
 import verifier
-from app.http_client import ServiceError
 
 
 def test_course_verifier_against_http_test_services(client, backend):
@@ -126,7 +127,7 @@ def test_docker_failure_is_502_but_health_stays_open(client, backend, admin_head
 def test_timeout_does_not_leak_internal_error(client, monkeypatch, admin_headers):
     def timeout(*args, **kwargs):
         raise requests.Timeout("secret contenu dans une erreur interne")
-    monkeypatch.setattr(client.app.state.docker.session, "request", timeout)
+    monkeypatch.setattr(main.requests, "request", timeout)
     response = client.get("/containers", headers=admin_headers)
     assert response.status_code == 502
     assert "secret" not in response.text
@@ -143,13 +144,13 @@ def test_invalid_docker_response_is_502(client, monkeypatch, admin_headers):
     response = requests.Response()
     response.status_code = 200
     response._content = b"not-json"
-    monkeypatch.setattr(client.app.state.docker.session, "request", lambda *a, **k: response)
+    monkeypatch.setattr(main.requests, "request", lambda *a, **k: response)
     assert client.get("/containers", headers=admin_headers).status_code == 502
 
 
 def test_invalid_identifier_cannot_become_a_docker_path(client, backend):
-    with pytest.raises(ServiceError) as error:
-        client.app.state.docker.inspect_managed("../../images/json")
+    with pytest.raises(HTTPException) as error:
+        main.lire_conteneur("../../images/json")
     assert error.value.status_code == 404
     assert not backend.calls
 

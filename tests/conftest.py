@@ -6,13 +6,10 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import Settings
-from app.main import create_app
+import main
 
 
 class Backend:
-    """Services HTTP de test. Aucun appel au moteur Docker de la machine."""
-
     def __init__(self):
         self.containers = {}
         self.machines = {}
@@ -179,13 +176,15 @@ def backend():
 
 
 @pytest.fixture
-def settings(backend):
-    return Settings(backend.url, backend.url, "test-netbox", "test-admin", "test-reader", "test-hook")
-
-
-@pytest.fixture
-def client(settings):
-    with TestClient(create_app(settings)) as client:
+def client(backend, monkeypatch):
+    for nom, valeur in {
+        "DOCKER_API_URL": backend.url, "NETBOX_URL": backend.url,
+        "NETBOX_TOKEN": "test-netbox", "API_TOKEN_ADMIN": "test-admin",
+        "API_TOKEN_READER": "test-reader", "WEBHOOK_SECRET": "test-hook",
+    }.items():
+        monkeypatch.setenv(nom, valeur)
+    monkeypatch.setattr(main, "remediations", 0)
+    with TestClient(main.app) as client:
         yield client
 
 
